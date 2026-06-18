@@ -1,7 +1,5 @@
-# app.py
-# Simple Flask REST API for CodeCraftHub
-
 from flask import Flask, request, jsonify, abort
+from flask_cors import CORS
 import json
 import os
 from datetime import datetime
@@ -30,10 +28,7 @@ def load_data():
         ensure_data_file()
         with open(path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            if isinstance(data, list):
-                return data
-            else:
-                return []
+            return data if isinstance(data, list) else []
     except (IOError, OSError) as e:
         abort(500, description=f"Error reading data file: {e}")
     except json.JSONDecodeError:
@@ -50,13 +45,12 @@ def save_data(data):
 def get_next_id(items):
     if not items:
         return 1
-    max_id = max((item.get('id', 0) for item in items), default=0)
-    return max_id + 1
+    return max((item.get('id', 0) for item in items), default=0) + 1
 
 def validate_course(payload, require_all=True):
     required_fields = {'name', 'description', 'target_date', 'status'}
     if require_all:
-        missing = [field for field in required_fields if field not in payload]
+        missing = [f for f in required_fields if f not in payload]
         if missing:
             return False, f"Missing required field(s): {', '.join(missing)}"
     if 'target_date' in payload:
@@ -69,16 +63,15 @@ def validate_course(payload, require_all=True):
     return True, ""
 
 app = Flask(__name__)
+CORS(app)  # ✅ CORS activé
 
 @app.route('/api/courses', methods=['GET'])
 def get_all_courses():
-    courses = load_data()
-    return jsonify(courses), 200
+    return jsonify(load_data()), 200
 
 @app.route('/api/courses/<int:course_id>', methods=['GET'])
 def get_course(course_id):
-    courses = load_data()
-    course = next((c for c in courses if c.get('id') == course_id), None)
+    course = next((c for c in load_data() if c.get('id') == course_id), None)
     if course is None:
         abort(404, description="Course not found")
     return jsonify(course), 200
@@ -92,9 +85,8 @@ def create_course():
     if not is_valid:
         abort(400, description=msg)
     data = load_data()
-    new_id = get_next_id(data)
     course = {
-        'id': new_id,
+        'id': get_next_id(data),
         'name': payload['name'],
         'description': payload['description'],
         'target_date': payload['target_date'],
@@ -117,14 +109,13 @@ def update_course(course_id):
     index = next((i for i, c in enumerate(courses) if c.get('id') == course_id), None)
     if index is None:
         abort(404, description="Course not found")
-    existing_created_at = courses[index].get('created_at', datetime.utcnow().isoformat() + 'Z')
     updated = {
         'id': course_id,
         'name': payload['name'],
         'description': payload['description'],
         'target_date': payload['target_date'],
         'status': payload['status'],
-        'created_at': existing_created_at
+        'created_at': courses[index].get('created_at', datetime.utcnow().isoformat() + 'Z')
     }
     courses[index] = updated
     save_data(courses)
